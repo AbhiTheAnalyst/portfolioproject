@@ -1,0 +1,239 @@
+--Covid 19 Data Exploration 
+--Skills used: Joins, CTE's, Temp Tables, Windows Functions,Aggregate Functions, Creating Views, Converting Data Types
+
+--before inserting data into pgadmin I need to create table for csv file ; 
+--First table 
+CREATE table covid_deaths(
+iso_code varchar(100),
+continent varchar(100),
+location varchar(100),
+date varchar(100) , 	
+population bigint,
+total_cases int,
+new_cases int,
+new_cases_smoothed decimal,
+total_deaths int,
+new_deaths int,
+new_deaths_smoothed decimal,	
+total_cases_per_million	decimal,
+new_cases_per_million	decimal,
+new_cases_smoothed_per_million	decimal,
+total_deaths_per_million decimal,
+new_deaths_per_million decimal,
+new_deaths_smoothed_per_million decimal,	
+reproduction_rate	decimal,
+icu_patients	int,
+icu_patients_per_million	decimal,
+hosp_patients int,
+hosp_patients_per_million	decimal,
+weekly_icu_admissions	decimal,
+weekly_icu_admissions_per_million	decimal,
+weekly_hosp_admissions	decimal,
+weekly_hosp_admissions_per_million decimal)
+
+--Second Table
+
+CREATE table covid_vaccinations(
+iso_code varchar(100),
+continent varchar(100),
+location varchar(100),
+date  varchar(100), 	
+new_tests int,
+total_tests int,
+total_tests_per_thousand decimal,
+new_tests_per_thousand decimal,
+new_tests_smoothed	int,
+new_tests_smoothed_per_thousand decimal,
+positive_rate decimal,
+tests_per_case decimal,
+tests_units varchar(100),
+total_vaccinations bigint,
+people_vaccinated bigint,
+people_fully_vaccinated bigint,
+new_vaccinations bigint,
+new_vaccinations_smoothed bigint,	
+total_vaccinations_per_hundred decimal,
+people_vaccinated_per_hundred	decimal,
+people_fully_vaccinated_per_hundred decimal,	
+new_vaccinations_smoothed_per_million	int,
+stringency_index	decimal,
+population_density decimal,
+median_age	decimal,
+aged_65_older	decimal,
+aged_70_older decimal,
+gdp_per_capita decimal,
+extreme_poverty decimal,
+cardiovasc_death_rate decimal,
+diabetes_prevalence	 decimal,
+female_smokers decimal,
+male_smokers	 decimal,
+handwashing_facilities decimal,
+hospital_beds_per_thousand decimal,
+life_expectancy decimal,
+human_development_index	 decimal,
+excess_mortality decimal)
+
+--Here,I changed date(varchar) to DATE
+--This could be done through CAST or CONVERT function as well.
+
+ALTER TABLE covid_deaths_1 ALTER COLUMN date TYPE DATE 
+using to_date(date, 'DD/MM/YY');
+
+Select *
+From covid_deaths
+Where continent is not null 
+order by 3,4
+
+-- Select Data that we are going to be starting with
+
+Select Location, date, total_cases, new_cases, total_deaths, population
+From covid_deaths
+Where continent is not null 
+order by 1,2
+
+-- Total Cases vs Total Deaths
+-- Shows likelihood of dying if you contract covid in your country
+
+select location,date,total_cases,
+total_deaths,(SELECT total_deaths::FLOAT/total_cases::FLOAT)*100 as deathpercentage
+from covid_deaths
+Where continent is not null 
+order by 1,2;
+
+--Shows likelihood of dying in a particular country
+
+select location,date,total_cases,
+total_deaths,(SELECT total_deaths::FLOAT/total_cases::FLOAT)*100 as deathpercentage
+from covid_deaths
+WHERE location='Australia'
+and continent is not null 
+order by 1,2;
+
+-- Total Cases vs Population
+-- Shows what percentage of population infected with Covid
+
+--Infected percentage all
+
+select location,date,population,total_cases,
+total_deaths,(SELECT total_CASES::FLOAT/population::FLOAT)*100
+as infectedpercentage
+from covid_deaths
+order by 1,2;
+
+
+--Infected percentage country
+
+select location,date,population,total_cases,
+total_deaths,(SELECT total_CASES::FLOAT/population::FLOAT)*100
+as infectedpercentage
+from covid_deaths
+where location = 'Australia'
+order by 1,2;
+
+-- Countries with Highest Infection Rate compared to Population
+
+select location,population,MAX(total_cases) AS highest_Infection,
+(SELECT MAX((total_CASES)::FLOAT/population::FLOAT))*100
+as infectedpercentage
+from covid_deaths
+GROUP BY location,population
+order by infectedpercentage DESC ;
+
+
+--Countries with Highest Death Count per Population
+select location,MAX(total_deaths) AS total_deathcounts
+from covid_deaths
+Where continent is not null
+GROUP BY location
+order by total_deathcounts DESC ;
+
+
+-- BREAKING THINGS DOWN BY CONTINENT
+
+-- Showing contintents with the highest death count per population
+
+Select location, MAX(Total_deaths) as TotalDeathCount
+From covid_deaths
+Where continent is  null 
+Group by location
+order by TotalDeathCount desc
+
+-- GLOBAL NUMBERS
+
+select sum(new_cases) as total_cases ,
+sum(new_deaths) as total_deaths,
+(SELECT sum(new_deaths::FLOAT)/sum(new_cases::FLOAT))*100 as deathpercentage
+from covid_deaths
+WHERE continent is not null 
+order by 1,2;
+
+-- Total Population vs Vaccinations
+-- Shows Percentage of Population that has recieved at least one Covid Vaccine
+
+select dea.continent,dea.location,dea.date,dea.population,vac.new_vaccinations,
+sum(vac.new_vaccinations) over (partition by dea.location order by dea.location,dea.date)
+as Rolling_people_vaccinated
+from covid_deaths dea
+join covid_vaccinations vac
+on dea.location=vac.location
+and dea.date=vac.date
+where dea.continent is not null
+order by 2,3
+
+-- Using CTE to perform Calculation on Partition By in previous query
+with PopvsVac (continent,Location ,Date, population, new_vaccinations, 
+			   Rolling_people_vaccinated )
+as 
+(select dea.continent,dea.location,dea.date,dea.population,vac.new_vaccinations,
+sum(vac.new_vaccinations) over (partition by dea.location
+								order by dea.location,dea.date)
+as Rolling_people_vaccinated
+from covid_deaths dea
+join covid_vaccinations vac
+on dea.location=vac.location
+and dea.date=vac.date
+where dea.continent is not null
+)
+select*,(Rolling_people_vaccinated/population)*100
+from PopvsVac
+
+--temp table
+DROP TABLE IF EXISTS  percentpopulationvaccinated;
+create table percentpopulationvaccinated
+( Continent varchar(255),
+Location varchar(255),
+date date,
+population numeric,
+New_vaccinations numeric,
+Rolling_people_vaccinated numeric
+);
+insert into percentpopulationvaccinated
+select dea.continent,dea.location,dea.date,dea.population,vac.new_vaccinations,
+sum(vac.new_vaccinations) over (partition by dea.location
+								order by dea.location,dea.date)
+as Rolling_people_vaccinated
+from covid_deaths dea
+join covid_vaccinations vac
+on dea.location=vac.location
+and dea.date=vac.date
+where dea.continent is not null;
+
+Select *, (Rolling_people_vaccinated/population)*100
+From percentpopulationvaccinated
+
+-- Creating View to store data for later visualizations
+DROP view IF EXISTS  percentpopulationvaccinated;
+create View percentpopulationvaccinated as
+select dea.continent,dea.location,dea.date,dea.population,vac.new_vaccinations,
+sum(vac.new_vaccinations) over (partition by dea.location
+								order by dea.location,dea.date)
+as Rolling_people_vaccinated
+from covid_deaths dea
+join covid_vaccinations vac
+on dea.location=vac.location
+and dea.date=vac.date
+where dea.continent is not null;
+
+select * from percentpopulationvaccinated 
+
+
