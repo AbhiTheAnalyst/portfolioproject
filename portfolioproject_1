@@ -182,11 +182,11 @@ order by 2,3
 
 -- Using CTE to perform Calculation on Partition By in previous query
 with PopvsVac (continent,Location ,Date, population, new_vaccinations, 
-			   Rolling_people_vaccinated )
+ Rolling_people_vaccinated )
 as 
 (select dea.continent,dea.location,dea.date,dea.population,vac.new_vaccinations,
 sum(vac.new_vaccinations) over (partition by dea.location
-								order by dea.location,dea.date)
+order by dea.location,dea.date)
 as Rolling_people_vaccinated
 from covid_deaths dea
 join covid_vaccinations vac
@@ -210,7 +210,7 @@ Rolling_people_vaccinated numeric
 insert into percentpopulationvaccinated
 select dea.continent,dea.location,dea.date,dea.population,vac.new_vaccinations,
 sum(vac.new_vaccinations) over (partition by dea.location
-								order by dea.location,dea.date)
+order by dea.location,dea.date)
 as Rolling_people_vaccinated
 from covid_deaths dea
 join covid_vaccinations vac
@@ -226,7 +226,7 @@ DROP view IF EXISTS  percentpopulationvaccinated;
 create View percentpopulationvaccinated as
 select dea.continent,dea.location,dea.date,dea.population,vac.new_vaccinations,
 sum(vac.new_vaccinations) over (partition by dea.location
-								order by dea.location,dea.date)
+order by dea.location,dea.date)
 as Rolling_people_vaccinated
 from covid_deaths dea
 join covid_vaccinations vac
